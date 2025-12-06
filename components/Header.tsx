@@ -1,13 +1,14 @@
 import React from 'react';
-import { Radio, Zap, Facebook } from 'lucide-react';
+import { Radio, Zap, Facebook, LogOut } from 'lucide-react';
 import { FacebookPage } from '../types';
 
 interface HeaderProps {
   connectedPage: FacebookPage | null;
   onConnectFb: () => void;
+  onLogout?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ connectedPage, onConnectFb }) => {
+export const Header: React.FC<HeaderProps> = ({ connectedPage, onConnectFb, onLogout }) => {
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -33,6 +34,15 @@ export const Header: React.FC<HeaderProps> = ({ connectedPage, onConnectFb }) =>
                 className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
               >
                 Connect Page
+              </button>
+            )}
+            {onLogout && (
+              <button 
+                onClick={onLogout}
+                className="text-gray-500 hover:text-red-600 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
               </button>
             )}
           </div>

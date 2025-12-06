@@ -3,7 +3,7 @@ import { ShieldCheck, AlertTriangle } from 'lucide-react';
 import { appwriteService } from '../services/appwriteService';
 
 export const Login: React.FC = () => {
-  const projectId = process.env.APPWRITE_PROJECT_ID;
+  const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
   const isConfigured = !!projectId;
 
   return (
@@ -32,7 +32,7 @@ export const Login: React.FC = () => {
                     Configuration Missing
                 </div>
                 <p className="text-sm text-red-600">
-                    APPWRITE_PROJECT_ID is missing in your environment variables.
+                    NEXT_PUBLIC_APPWRITE_PROJECT_ID is missing.
                 </p>
             </div>
         )}
@@ -44,8 +44,6 @@ export const Login: React.FC = () => {
             {isConfigured && (
                 <div className="text-[10px] text-gray-300 bg-gray-50 p-2 rounded">
                     Project ID: {projectId}
-                    <br/>
-                    (Verify this matches your Appwrite Console)
                 </div>
             )}
         </div>
