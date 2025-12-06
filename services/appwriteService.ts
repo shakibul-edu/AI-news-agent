@@ -1,12 +1,12 @@
 import { Client, Account, Databases, ID, Query } from 'appwrite';
 import { FacebookPage, PostHistoryItem } from '../types';
 
-// Use NEXT_PUBLIC_ for client-side variables in Next.js
-const ENDPOINT = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
-const PROJECT_ID = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID; 
-const DB_ID = process.env.NEXT_PUBLIC_APPWRITE_DB_ID || 'sambad-db';
-const COLL_USERS = process.env.NEXT_PUBLIC_APPWRITE_COLLECTION_USERS || 'user_configs';
-const COLL_POSTS = process.env.NEXT_PUBLIC_APPWRITE_COLLECTION_POSTS || 'posts';
+// Use VITE_ for client-side variables in Vite
+const ENDPOINT = process.env.VITE_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
+const PROJECT_ID = process.env.VITE_APPWRITE_PROJECT_ID; 
+const DB_ID = process.env.VITE_APPWRITE_DB_ID || 'sambad-db';
+const COLL_USERS = process.env.VITE_APPWRITE_COLLECTION_USERS || 'user_configs';
+const COLL_POSTS = process.env.VITE_APPWRITE_COLLECTION_POSTS || 'posts';
 
 const client = new Client();
 client.setEndpoint(ENDPOINT);
