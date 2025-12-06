@@ -290,7 +290,7 @@ export const Dashboard: React.FC = () => {
     }
 
     addLog(`Posting to ${config.connectedPage.name}: "${post.banglaHeadline}"...`, 'action');
-    const message = `${post.banglaHeadline}\n\n${post.banglaSummary}\n\n${post.hashtags.join(' ')}\n\n(AI Generated Report)`;
+    const message = `${post.banglaHeadline}\n\n${post.banglaSummary}\n\n${post.hashtags.join(' ')}\n`;
 
     try {
       let fbPostId = '';

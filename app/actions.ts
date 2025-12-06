@@ -18,6 +18,7 @@ export async function searchNewsAction(tags: string[]) {
     2. Do not use markdown code blocks. Just the raw JSON string.
     3. The array should contain exactly 4 distinct news items.
     4. Each item must have: title, source, url, snippet.
+    5. only today's news articles.
   `;
 
   try {
