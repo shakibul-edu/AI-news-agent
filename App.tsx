@@ -138,11 +138,13 @@ const App: React.FC = () => {
   };
 
   const handleConnectFb = () => {
-    // Simulate OAuth flow
-    const confirmed = window.confirm("Connect to 'My News Page' on Facebook?");
-    if (confirmed) {
+    const pageInfo = window.prompt("Please enter your Facebook Page Name or ID to connect:");
+    
+    if (pageInfo && pageInfo.trim().length > 0) {
       updateConfig({ fbConnected: true });
-      addLog('Facebook Page connected successfully.', 'success');
+      addLog(`Successfully connected to Facebook Page: "${pageInfo}"`, 'success');
+    } else if (pageInfo !== null) {
+      addLog('Connection cancelled: No Page Name/ID provided.', 'error');
     }
   };
 
@@ -154,7 +156,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Sidebar: Controls & Logs */}
-          <div className="lg:col-span-4 space-y-6">
+          <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-20 h-fit">
             <AgentControl 
               config={config} 
               updateConfig={updateConfig} 
