@@ -2,15 +2,19 @@ import { Client, Account, Databases, ID, Query } from 'appwrite';
 import { FacebookPage, PostHistoryItem } from '../types';
 
 const ENDPOINT = process.env.APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
-const PROJECT_ID = process.env.APPWRITE_PROJECT_ID || ''; 
+const PROJECT_ID = process.env.APPWRITE_PROJECT_ID; 
 const DB_ID = process.env.APPWRITE_DB_ID || 'sambad-db';
 const COLL_USERS = process.env.APPWRITE_COLLECTION_USERS || 'user_configs';
 const COLL_POSTS = process.env.APPWRITE_COLLECTION_POSTS || 'posts';
 
 // Initialize Client
 const client = new Client();
+client.setEndpoint(ENDPOINT);
+
 if (PROJECT_ID) {
-    client.setEndpoint(ENDPOINT).setProject(PROJECT_ID);
+    client.setProject(PROJECT_ID);
+} else {
+    console.warn("Appwrite Project ID is missing. Auth calls will fail.");
 }
 
 const account = new Account(client);
@@ -22,14 +26,26 @@ export const appwriteService = {
     
     // Auth
     loginWithGoogle: () => {
+        if (!PROJECT_ID) {
+            alert("Configuration Error: APPWRITE_PROJECT_ID is missing.");
+            return;
+        }
         // Redirects to current URL after login
-        account.createOAuth2Session('google', window.location.href, window.location.href);
+        // We catch immediate sync errors, but async errors happen on the redirect target
+        try {
+            account.createOAuth2Session('google', window.location.href, window.location.href);
+        } catch (e) {
+            console.error("Failed to initiate Google Login", e);
+            alert("Failed to initiate login. Check console for details.");
+        }
     },
 
     getCurrentUser: async () => {
+        if (!PROJECT_ID) return null;
         try {
             return await account.get();
         } catch (e) {
+            // Not logged in or error
             return null;
         }
     },
@@ -86,7 +102,7 @@ export const appwriteService = {
                 };
             }
         } catch (e) {
-            console.warn("No saved page config found", e);
+            console.warn("No saved page config found. This is normal for new users.", e);
         }
         return null;
     },

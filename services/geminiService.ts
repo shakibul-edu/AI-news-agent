@@ -68,10 +68,11 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
 export const generateNewsImage = async (title: string): Promise<string | null> => {
   const ai = getClient();
   try {
-    // Simplified prompt for better compatibility
-    const prompt = `Generate a news illustration for the headline: "${title}". 
-    The style should be a high-quality, realistic, dramatic news thumbnail. 
-    16:9 aspect ratio. Do not include text in the image.`;
+    // Softened prompt to avoid safety triggers on political/news keywords
+    // We focus on the visual composition rather than specific "news events"
+    const prompt = `Create a symbolic, artistic digital illustration representing the concept of: "${title}".
+    Style: Professional, abstract, editorial illustration, 16:9 aspect ratio.
+    Avoid text, violence, or sensitive real-world imagery. Focus on themes and symbols.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
@@ -80,9 +81,9 @@ export const generateNewsImage = async (title: string): Promise<string | null> =
       },
     });
     
-    // Check candidates for image data
     const candidate = response.candidates?.[0];
     
+    // Check for explicit image part
     if (candidate?.content?.parts) {
         for (const part of candidate.content.parts) {
             if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
@@ -91,9 +92,9 @@ export const generateNewsImage = async (title: string): Promise<string | null> =
         }
     }
     
-    // If we got here, check if there was a text refusal or error in the response
-    if (candidate?.content?.parts?.[0]?.text) {
-        console.warn("Image generation returned text instead of image:", candidate.content.parts[0].text);
+    // Log refusal if any
+    if (candidate?.finishReason !== 'STOP') {
+        console.warn(`Image generation finished with reason: ${candidate?.finishReason}`);
     }
     
     return null;
