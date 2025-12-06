@@ -1,13 +1,18 @@
 import { NewsArticle, ProcessedPost } from "../types";
 import { searchNewsAction, generateImageAction, generateBanglaPostAction } from "../app/actions";
 
-// This service now acts as a client-side bridge to Server Actions
-// ensuring the API Key remains secure on the server.
+// Service Layer
+// In Next.js, this calls Server Actions.
+// Note: If running purely client-side (without a Next.js server), these calls will fail due to missing server-side API keys.
 
 export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
   try {
     const rawData = await searchNewsAction(tags);
     
+    if (!rawData) {
+        throw new Error("No data received from server action");
+    }
+
     return rawData.map((item: any, index: number) => ({
       id: `news-${Date.now()}-${index}`,
       title: item.title,
@@ -19,12 +24,18 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
     }));
   } catch (error) {
     console.error("Error in searchNews service:", error);
-    throw error;
+    // Re-throw to be caught by UI logs
+    throw new Error("Failed to fetch news. Ensure you are running this as a Next.js Server (npm run dev) and API_KEY is set in .env");
   }
 };
 
 export const generateNewsImage = async (title: string): Promise<string | null> => {
-  return await generateImageAction(title);
+  try {
+      return await generateImageAction(title);
+  } catch (e) {
+      console.warn("Image generation failed:", e);
+      return null;
+  }
 };
 
 export const generateBanglaPost = async (article: NewsArticle): Promise<Omit<ProcessedPost, 'status' | 'timestamp'>> => {
@@ -42,6 +53,6 @@ export const generateBanglaPost = async (article: NewsArticle): Promise<Omit<Pro
     };
   } catch (error) {
     console.error("Error in generateBanglaPost service:", error);
-    throw error;
+    throw new Error("Content generation failed. Check server logs.");
   }
 };

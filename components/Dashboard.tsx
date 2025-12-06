@@ -41,33 +41,50 @@ export const Dashboard: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
 
+  // Helper to add logs
+  const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
+    setLogs(prev => [...prev, {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: Date.now(),
+      message,
+      type
+    }]);
+  }, []);
+
   // Initialize Auth & Appwrite
   useEffect(() => {
+    let mounted = true;
     const init = async () => {
-        const currentUser = await appwriteService.getCurrentUser();
-        if (currentUser) {
-            setUser({ id: currentUser.$id, name: currentUser.name, email: currentUser.email });
-            addLog(`Welcome back, ${currentUser.name}`, 'success');
-            
-            // Restore Page Connection
-            const savedPage = await appwriteService.getPageConnection(currentUser.$id);
-            if (savedPage) {
-                setConfig(prev => ({ ...prev, connectedPage: savedPage }));
-                addLog(`Restored connection to page: ${savedPage.name}`, 'info');
+        try {
+            const currentUser = await appwriteService.getCurrentUser();
+            if (mounted && currentUser) {
+                setUser({ id: currentUser.$id, name: currentUser.name, email: currentUser.email });
+                addLog(`Welcome back, ${currentUser.name}`, 'success');
+                
+                // Restore Page Connection
+                const savedPage = await appwriteService.getPageConnection(currentUser.$id);
+                if (savedPage) {
+                    setConfig(prev => ({ ...prev, connectedPage: savedPage }));
+                    addLog(`Restored connection to page: ${savedPage.name}`, 'info');
+                }
+
+                // Fetch History
+                const history = await appwriteService.getHistory(currentUser.$id);
+                setPostHistory(history);
+
+                // Check Limits
+                const count = await appwriteService.getTodayUsageCount(currentUser.$id);
+                setUsageCount(count);
             }
-
-            // Fetch History
-            const history = await appwriteService.getHistory(currentUser.$id);
-            setPostHistory(history);
-
-            // Check Limits
-            const count = await appwriteService.getTodayUsageCount(currentUser.$id);
-            setUsageCount(count);
+        } catch (e) {
+            console.error("Auth check failed", e);
+        } finally {
+            if (mounted) setLoadingAuth(false);
         }
-        setLoadingAuth(false);
     };
     init();
-  }, []);
+    return () => { mounted = false; };
+  }, [addLog]);
 
   const handleLogout = async () => {
     await appwriteService.logout();
@@ -75,16 +92,7 @@ export const Dashboard: React.FC = () => {
     setRawArticles([]);
     setProcessedPosts([]);
     setLogs([]);
-  };
-
-  // Helper to add logs
-  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
-    setLogs(prev => [...prev, {
-      id: Math.random().toString(36).substr(2, 9),
-      timestamp: Date.now(),
-      message,
-      type
-    }]);
+    addLog("Logged out successfully", "info");
   };
 
   const updateConfig = (newConfig: Partial<AgentConfig>) => {
@@ -192,7 +200,7 @@ export const Dashboard: React.FC = () => {
       setIsProcessing(false);
       addLog('Cycle complete.', 'info');
     }
-  }, [config.tags, isProcessing, rawArticles, usageCount]);
+  }, [config.tags, isProcessing, rawArticles, usageCount, addLog]);
 
   // Auto-mode Effect
   useEffect(() => {
