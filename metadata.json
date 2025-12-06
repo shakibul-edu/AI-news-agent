@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Sambad AI Agent",
+  "description": "An autonomous AI agent that monitors international news, summarizes stories, translates them to Bangla, and prepares them for Facebook publication.",
+  "requestFramePermissions": []
+}
