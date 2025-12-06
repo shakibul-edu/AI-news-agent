@@ -4,7 +4,7 @@ import { AgentControl } from './components/AgentControl';
 import { NewsFeed } from './components/NewsFeed';
 import { ActivityLog } from './components/ActivityLog';
 import { AgentConfig, LogEntry, NewsArticle, ProcessedPost, FacebookPage } from './types';
-import { searchNews, generateBanglaPost } from './services/geminiService';
+import { searchNews, generateBanglaPost, generateNewsImage } from './services/geminiService';
 
 const DEFAULT_TAGS = ['Technology', 'World Politics', 'Science', 'Bangladesh'];
 
@@ -109,19 +109,27 @@ const App: React.FC = () => {
 
       setRawArticles(prev => [...newArticles, ...prev]);
 
-      // 2. Process News (Translate & Summarize)
+      // 2. Process News (Translate & Summarize & Generate Image)
       for (const article of newArticles) {
         addLog(`Processing article: "${article.title.substring(0, 30)}..."`, 'info');
         try {
-          const processed = await generateBanglaPost(article);
+          // Parallel execution for text and image
+          addLog(`Generating Bangla content and AI image...`, 'action');
+          
+          const [processedText, imageUrl] = await Promise.all([
+            generateBanglaPost(article),
+            generateNewsImage(article.title)
+          ]);
           
           setProcessedPosts(prev => [{
-            ...processed,
+            ...processedText,
+            imageUrl: imageUrl || undefined,
             status: 'pending',
             timestamp: Date.now()
           }, ...prev]);
           
-          addLog(`Translated & Summarized: ${processed.banglaHeadline}`, 'success');
+          addLog(`Content ready: ${processedText.banglaHeadline}`, 'success');
+          if (imageUrl) addLog(`Image generated successfully.`, 'success');
         } catch (err) {
           addLog(`Failed to process article: ${article.title}`, 'error');
         }
@@ -206,11 +214,23 @@ const App: React.FC = () => {
       } else {
         addLog("User cancelled login or did not fully authorize.", "error");
       }
-    }, { scope: 'pages_manage_posts,pages_show_list,pages_read_engagement' });
+    }, { scope: 'pages_manage_posts,pages_show_list' });
+  };
+
+  // Convert Data URI to Blob
+  const dataURItoBlob = (dataURI: string) => {
+    const byteString = atob(dataURI.split(',')[1]);
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    return new Blob([ab], { type: mimeString });
   };
 
   // Handle Posting to Facebook
-  const handlePostToFb = (post: ProcessedPost) => {
+  const handlePostToFb = async (post: ProcessedPost) => {
     if (!config.connectedPage) {
       addLog('Cannot post: No Facebook Page connected.', 'error');
       return;
@@ -219,27 +239,56 @@ const App: React.FC = () => {
     addLog(`Posting to ${config.connectedPage.name}: "${post.banglaHeadline}"...`, 'action');
     
     // Construct the post message
-    const message = `${post.banglaHeadline}\n\n${post.banglaSummary}\n\n${post.hashtags.join(' ')}\n\nSource: AI Generated via Sambad Agent`;
+    const message = `${post.banglaHeadline}\n\n${post.banglaSummary}\n\n${post.hashtags.join(' ')}\n\n(AI Generated Report)`;
 
-    // Call Graph API
-    window.FB.api(
-      `/${config.connectedPage.id}/feed`,
-      'POST',
-      {
-        message: message,
-        access_token: config.connectedPage.access_token
-      },
-      (response: any) => {
-        if (response && !response.error) {
-           setProcessedPosts(prev => prev.map(p => 
-            p.id === post.id ? { ...p, status: 'posted' } : p
-          ));
-          addLog(`Successfully posted. Post ID: ${response.id}`, 'success');
+    try {
+      if (post.imageUrl) {
+        // Post with Image (Must use fetch for multipart/form-data support with Blob)
+        const blob = dataURItoBlob(post.imageUrl);
+        const formData = new FormData();
+        formData.append('access_token', config.connectedPage.access_token);
+        formData.append('source', blob);
+        formData.append('message', message);
+        formData.append('published', 'true');
+
+        const response = await fetch(`https://graph.facebook.com/${config.connectedPage.id}/photos`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.id) {
+          setProcessedPosts(prev => prev.map(p => p.id === post.id ? { ...p, status: 'posted' } : p));
+          addLog(`Successfully posted Photo. Post ID: ${data.post_id || data.id}`, 'success');
         } else {
-          addLog(`Failed to post: ${response.error?.message}`, 'error');
+           throw new Error(data.error?.message || 'Unknown FB API Error');
         }
+
+      } else {
+        // Text Only Post (Using FB SDK)
+        window.FB.api(
+          `/${config.connectedPage.id}/feed`,
+          'POST',
+          {
+            message: message,
+            access_token: config.connectedPage.access_token
+          },
+          (response: any) => {
+            if (response && !response.error) {
+               setProcessedPosts(prev => prev.map(p => 
+                p.id === post.id ? { ...p, status: 'posted' } : p
+              ));
+              addLog(`Successfully posted. Post ID: ${response.id}`, 'success');
+            } else {
+              addLog(`Failed to post: ${response.error?.message}`, 'error');
+            }
+          }
+        );
       }
-    );
+    } catch (e: any) {
+      addLog(`Failed to post: ${e.message}`, 'error');
+    }
   };
 
   return (
