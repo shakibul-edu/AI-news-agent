@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, CheckCircle, Clock, Share2, Globe, AlertCircle, Link } from 'lucide-react';
+import { ExternalLink, CheckCircle, Clock, Share2, Globe, AlertCircle, Link, Image as ImageIcon } from 'lucide-react';
 import { NewsArticle, ProcessedPost } from '../types';
 
 interface NewsFeedProps {
@@ -39,11 +39,25 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ processedPosts, rawArticles,
             const original = rawArticles.find(a => a.id === post.originalArticleId);
             return (
               <div key={post.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                
+                {post.imageUrl && (
+                  <div className="w-full h-48 bg-gray-100 overflow-hidden border-b border-gray-100">
+                    <img src={post.imageUrl} alt="AI Generated" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-3">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700">
-                      AI Translated
-                    </span>
+                    <div className="flex space-x-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700">
+                        AI Translated
+                        </span>
+                        {post.imageUrl && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-purple-50 text-purple-700">
+                            <ImageIcon className="w-3 h-3 mr-1" /> AI Image
+                            </span>
+                        )}
+                    </div>
                     <span className="text-xs text-gray-500">
                       {new Date(post.timestamp).toLocaleTimeString()}
                     </span>
@@ -54,7 +68,7 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ processedPosts, rawArticles,
                     <h4 className="text-xl font-bold text-gray-900 mb-2 leading-tight">
                       {post.banglaHeadline}
                     </h4>
-                    <p className="text-gray-600 text-base leading-relaxed mb-4">
+                    <p className="text-gray-600 text-base leading-relaxed mb-4 whitespace-pre-wrap">
                       {post.banglaSummary}
                     </p>
                     <div className="flex flex-wrap gap-2 mb-4 text-blue-600 text-sm font-medium">

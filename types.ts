@@ -14,6 +14,7 @@ export interface ProcessedPost {
   banglaHeadline: string;
   banglaSummary: string;
   hashtags: string[];
+  imageUrl?: string;
   status: 'pending' | 'posted' | 'failed';
   timestamp: number;
 }

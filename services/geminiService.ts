@@ -72,21 +72,47 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
   }
 };
 
+export const generateNewsImage = async (title: string): Promise<string | null> => {
+  const ai = getClient();
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        parts: [{ text: `A professional, realistic news illustration concept about: ${title}. High quality, cinematic lighting, suitable for a news article header.` }],
+      },
+    });
+    
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+    }
+    return null;
+  } catch (error) {
+    console.error("Image generation failed:", error);
+    return null;
+  }
+};
+
 export const generateBanglaPost = async (article: NewsArticle): Promise<Omit<ProcessedPost, 'status' | 'timestamp'>> => {
   const ai = getClient();
+  const dateStr = article.publishedTime ? new Date(article.publishedTime).toLocaleDateString() : 'Today';
 
   const prompt = `
-    You are a professional social media manager for a Bengali news page.
+    You are a professional senior editor for a Bengali international news portal.
     
     Task:
-    1. Translate the following news summary into formal but engaging Bengali (Bangla).
-    2. Create a catchy headline in Bangla.
-    3. Summarize the key points in 2-3 sentences max.
-    4. Generate 3-5 relevant hashtags in English or Bangla mixed.
+    1. Translate and expand upon the news summary into a detailed Bengali (Bangla) news report.
+    2. The report should be substantial (approx. 150-200 words), covering the context, the event, and potential implications. Do NOT be brief.
+    3. Use a formal, journalistic, and engaging tone.
+    4. Create a catchy, click-worthy headline in Bangla.
+    5. Generate 3-5 relevant hashtags (English/Bangla mix).
+    6. Explicitly mention the Source Name and Date at the end of the text.
 
     Input News:
     Headline: ${article.title}
     Source: ${article.source}
+    Date: ${dateStr}
     Content: ${article.snippet}
   `;
 
