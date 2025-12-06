@@ -12,8 +12,6 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
   const ai = getClient();
   const tagString = tags.join(", ");
   
-  // Note: We cannot use responseMimeType: "application/json" combined with tools: [{ googleSearch: {} }]
-  // We must prompt for JSON format and parse the text response manually.
   const prompt = `
     Perform a Google Search to find the latest breaking international news regarding: ${tagString}. 
     Focus on mainstream credible sources (BBC, Reuters, CNN, Al Jazeera, etc.).
@@ -35,13 +33,10 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
-        // responseMimeType and responseSchema removed to avoid INVALID_ARGUMENT error
       },
     });
 
     let text = response.text || "[]";
-    
-    // Cleanup: Remove potential markdown formatting if the model adds it despite instructions
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
     let rawData;
@@ -49,13 +44,11 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
         rawData = JSON.parse(text);
     } catch (e) {
         console.warn("Failed to parse JSON from news search, raw text:", text);
-        // If parsing fails, return empty array rather than crashing
         return [];
     }
 
     if (!Array.isArray(rawData)) return [];
     
-    // Map to our internal type
     return rawData.map((item: any, index: number) => ({
       id: `news-${Date.now()}-${index}`,
       title: item.title,
@@ -75,18 +68,34 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
 export const generateNewsImage = async (title: string): Promise<string | null> => {
   const ai = getClient();
   try {
+    // Simplified prompt for better compatibility
+    const prompt = `Generate a news illustration for the headline: "${title}". 
+    The style should be a high-quality, realistic, dramatic news thumbnail. 
+    16:9 aspect ratio. Do not include text in the image.`;
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
-        parts: [{ text: `A professional, realistic news illustration concept about: ${title}. High quality, cinematic lighting, suitable for a news article header.` }],
+        parts: [{ text: prompt }],
       },
     });
     
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    // Check candidates for image data
+    const candidate = response.candidates?.[0];
+    
+    if (candidate?.content?.parts) {
+        for (const part of candidate.content.parts) {
+            if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
         }
     }
+    
+    // If we got here, check if there was a text refusal or error in the response
+    if (candidate?.content?.parts?.[0]?.text) {
+        console.warn("Image generation returned text instead of image:", candidate.content.parts[0].text);
+    }
+    
     return null;
   } catch (error) {
     console.error("Image generation failed:", error);

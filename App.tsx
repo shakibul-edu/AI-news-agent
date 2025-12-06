@@ -3,10 +3,14 @@ import { Header } from './components/Header';
 import { AgentControl } from './components/AgentControl';
 import { NewsFeed } from './components/NewsFeed';
 import { ActivityLog } from './components/ActivityLog';
-import { AgentConfig, LogEntry, NewsArticle, ProcessedPost, FacebookPage } from './types';
+import { Login } from './components/Login';
+import { HistoryLog } from './components/HistoryLog';
+import { AgentConfig, LogEntry, NewsArticle, ProcessedPost, FacebookPage, UserProfile, PostHistoryItem } from './types';
 import { searchNews, generateBanglaPost, generateNewsImage } from './services/geminiService';
+import { appwriteService } from './services/appwriteService';
 
 const DEFAULT_TAGS = ['Technology', 'World Politics', 'Science', 'Bangladesh'];
+const DAILY_LIMIT = 2;
 
 // Extend Window interface for FB SDK
 declare global {
@@ -17,6 +21,11 @@ declare global {
 }
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [usageCount, setUsageCount] = useState(0);
+  const [postHistory, setPostHistory] = useState<PostHistoryItem[]>([]);
+
   const [config, setConfig] = useState<AgentConfig>({
     tags: DEFAULT_TAGS,
     autoMode: false,
@@ -29,6 +38,34 @@ const App: React.FC = () => {
   const [processedPosts, setProcessedPosts] = useState<ProcessedPost[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
+
+  // Initialize Auth & Appwrite
+  useEffect(() => {
+    const init = async () => {
+        const currentUser = await appwriteService.getCurrentUser();
+        if (currentUser) {
+            setUser({ id: currentUser.$id, name: currentUser.name, email: currentUser.email });
+            addLog(`Welcome back, ${currentUser.name}`, 'success');
+            
+            // Restore Page Connection
+            const savedPage = await appwriteService.getPageConnection(currentUser.$id);
+            if (savedPage) {
+                setConfig(prev => ({ ...prev, connectedPage: savedPage }));
+                addLog(`Restored connection to page: ${savedPage.name}`, 'info');
+            }
+
+            // Fetch History
+            const history = await appwriteService.getHistory(currentUser.$id);
+            setPostHistory(history);
+
+            // Check Limits
+            const count = await appwriteService.getTodayUsageCount(currentUser.$id);
+            setUsageCount(count);
+        }
+        setLoadingAuth(false);
+    };
+    init();
+  }, []);
 
   // Helper to add logs
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
@@ -80,8 +117,16 @@ const App: React.FC = () => {
   // Core Agent Logic
   const runAgentCycle = useCallback(async () => {
     if (isProcessing) return;
+
+    // Daily Limit Check
+    if (usageCount >= DAILY_LIMIT) {
+        addLog(`Daily limit reached (${DAILY_LIMIT}/${DAILY_LIMIT}). Please try again tomorrow.`, 'error');
+        setConfig(prev => ({...prev, autoMode: false}));
+        return;
+    }
+
     setIsProcessing(true);
-    addLog('Starting fetch cycle...', 'action');
+    addLog(`Starting cycle. Usage today: ${usageCount + 1}/${DAILY_LIMIT}`, 'action');
 
     try {
       // 1. Fetch News
@@ -130,6 +175,8 @@ const App: React.FC = () => {
           
           addLog(`Content ready: ${processedText.banglaHeadline}`, 'success');
           if (imageUrl) addLog(`Image generated successfully.`, 'success');
+          else addLog(`Image generation skipped or failed.`, 'info');
+
         } catch (err) {
           addLog(`Failed to process article: ${article.title}`, 'error');
         }
@@ -141,7 +188,7 @@ const App: React.FC = () => {
       setIsProcessing(false);
       addLog('Cycle complete.', 'info');
     }
-  }, [config.tags, isProcessing, rawArticles]);
+  }, [config.tags, isProcessing, rawArticles, usageCount]);
 
   // Auto-mode Effect
   useEffect(() => {
@@ -189,8 +236,7 @@ const App: React.FC = () => {
             } else if (pages.length === 1) {
               // Auto select if only 1
               const page = pages[0];
-              updateConfig({ connectedPage: { id: page.id, name: page.name, access_token: page.access_token } });
-              addLog(`Connected to Page: ${page.name}`, "success");
+              connectPage(page);
             } else {
               // Let user choose
               const msg = "Found multiple pages. Enter number to select:\n" + 
@@ -200,9 +246,7 @@ const App: React.FC = () => {
               const index = selection ? parseInt(selection) - 1 : -1;
               
               if (index >= 0 && index < pages.length) {
-                const page = pages[index];
-                updateConfig({ connectedPage: { id: page.id, name: page.name, access_token: page.access_token } });
-                addLog(`Connected to Page: ${page.name}`, "success");
+                connectPage(pages[index]);
               } else {
                 addLog("Invalid selection. Page not connected.", "error");
               }
@@ -215,6 +259,17 @@ const App: React.FC = () => {
         addLog("User cancelled login or did not fully authorize.", "error");
       }
     }, { scope: 'pages_manage_posts,pages_show_list' });
+  };
+
+  const connectPage = async (page: any) => {
+      const fbPage: FacebookPage = { id: page.id, name: page.name, access_token: page.access_token };
+      updateConfig({ connectedPage: fbPage });
+      addLog(`Connected to Page: ${page.name}`, "success");
+      
+      if (user) {
+          await appwriteService.savePageConnection(user.id, fbPage);
+          addLog("Page connection saved to database.", "success");
+      }
   };
 
   // Convert Data URI to Blob
@@ -242,6 +297,7 @@ const App: React.FC = () => {
     const message = `${post.banglaHeadline}\n\n${post.banglaSummary}\n\n${post.hashtags.join(' ')}\n\n(AI Generated Report)`;
 
     try {
+      let fbPostId = '';
       if (post.imageUrl) {
         // Post with Image (Must use fetch for multipart/form-data support with Blob)
         const blob = dataURItoBlob(post.imageUrl);
@@ -259,37 +315,65 @@ const App: React.FC = () => {
         const data = await response.json();
         
         if (data.id) {
-          setProcessedPosts(prev => prev.map(p => p.id === post.id ? { ...p, status: 'posted' } : p));
-          addLog(`Successfully posted Photo. Post ID: ${data.post_id || data.id}`, 'success');
+            fbPostId = data.post_id || data.id;
         } else {
            throw new Error(data.error?.message || 'Unknown FB API Error');
         }
 
       } else {
         // Text Only Post (Using FB SDK)
-        window.FB.api(
-          `/${config.connectedPage.id}/feed`,
-          'POST',
-          {
-            message: message,
-            access_token: config.connectedPage.access_token
-          },
-          (response: any) => {
-            if (response && !response.error) {
-               setProcessedPosts(prev => prev.map(p => 
-                p.id === post.id ? { ...p, status: 'posted' } : p
-              ));
-              addLog(`Successfully posted. Post ID: ${response.id}`, 'success');
-            } else {
-              addLog(`Failed to post: ${response.error?.message}`, 'error');
-            }
-          }
-        );
+        // Wrap SDK call in Promise
+        fbPostId = await new Promise((resolve, reject) => {
+            window.FB.api(
+                `/${config.connectedPage.id}/feed`,
+                'POST',
+                {
+                  message: message,
+                  access_token: config.connectedPage!.access_token
+                },
+                (response: any) => {
+                  if (response && !response.error) {
+                     resolve(response.id);
+                  } else {
+                    reject(new Error(response.error?.message));
+                  }
+                }
+              );
+        });
       }
+
+      // Success Logic
+      setProcessedPosts(prev => prev.map(p => p.id === post.id ? { ...p, status: 'posted' } : p));
+      addLog(`Successfully posted. Post ID: ${fbPostId}`, 'success');
+      
+      // Update Usage & History
+      if (user) {
+          const newHistoryItem: PostHistoryItem = {
+              headline: post.banglaHeadline,
+              summary: post.banglaSummary,
+              fbPostId: fbPostId,
+              pageName: config.connectedPage.name,
+              postedAt: new Date().toISOString()
+          };
+          await appwriteService.savePostToHistory(user.id, newHistoryItem);
+          setPostHistory(prev => [newHistoryItem, ...prev]);
+          
+          // Increment local usage count (approximate, simpler than re-fetching)
+          setUsageCount(prev => prev + 1);
+      }
+
     } catch (e: any) {
       addLog(`Failed to post: ${e.message}`, 'error');
     }
   };
+
+  if (loadingAuth) {
+      return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">Initializing Agent...</div>;
+  }
+
+  if (!user) {
+      return <Login />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
@@ -306,18 +390,34 @@ const App: React.FC = () => {
               isProcessing={isProcessing}
               onManualTrigger={runAgentCycle}
             />
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                 <div className="flex justify-between items-center text-sm mb-2">
+                     <span className="text-gray-500">Daily Limit Usage</span>
+                     <span className={`font-semibold ${usageCount >= DAILY_LIMIT ? 'text-red-600' : 'text-green-600'}`}>
+                         {usageCount} / {DAILY_LIMIT}
+                     </span>
+                 </div>
+                 <div className="w-full bg-gray-200 rounded-full h-2">
+                     <div 
+                        className={`h-2 rounded-full ${usageCount >= DAILY_LIMIT ? 'bg-red-500' : 'bg-green-500'}`} 
+                        style={{ width: `${Math.min((usageCount / DAILY_LIMIT) * 100, 100)}%` }}
+                     ></div>
+                 </div>
+            </div>
             
             <ActivityLog logs={logs} />
+            <HistoryLog history={postHistory} />
 
             {!process.env.API_KEY && (
                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                 <strong>Warning:</strong> No API_KEY detected. The agent cannot fetch or process news. Please check your environment variables.
+                 <strong>Warning:</strong> No API_KEY detected. The agent cannot fetch or process news.
                </div>
             )}
             
-            {!config.connectedPage && (
-               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
-                 <strong>Setup Required:</strong> Click "Connect Page" in the header to link a Facebook Page for auto-posting. You will need a valid Facebook App ID.
+            {!process.env.APPWRITE_PROJECT_ID && (
+               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-700">
+                 <strong>Setup:</strong> Appwrite Project ID missing. Database features will be disabled.
                </div>
             )}
           </div>

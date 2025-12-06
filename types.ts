@@ -38,3 +38,18 @@ export interface AgentConfig {
   refreshInterval: number; // in seconds
   connectedPage: FacebookPage | null;
 }
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface PostHistoryItem {
+  $id?: string;
+  headline: string;
+  summary: string;
+  fbPostId: string;
+  pageName: string;
+  postedAt: string;
+}
