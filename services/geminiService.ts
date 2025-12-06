@@ -12,10 +12,21 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
   const ai = getClient();
   const tagString = tags.join(", ");
   
-  // We use the search tool to find news, but we ask for JSON output to parse it easily.
-  const prompt = `Find the latest breaking international news regarding: ${tagString}. 
-  Focus on mainstream credible sources (BBC, Reuters, CNN, Al Jazeera, etc.).
-  Return a list of 4 distinct news items.
+  // Note: We cannot use responseMimeType: "application/json" combined with tools: [{ googleSearch: {} }]
+  // We must prompt for JSON format and parse the text response manually.
+  const prompt = `
+    Perform a Google Search to find the latest breaking international news regarding: ${tagString}. 
+    Focus on mainstream credible sources (BBC, Reuters, CNN, Al Jazeera, etc.).
+    
+    Output requirements:
+    1. Return strictly a JSON array. 
+    2. Do not use markdown code blocks (no \`\`\`json). Just the raw JSON string.
+    3. The array should contain exactly 4 distinct news items.
+    4. Each item must have the following fields:
+       - title: Headline of the news
+       - source: Name of the news outlet
+       - url: The link to the article found in search results
+       - snippet: A short summary of the event
   `;
 
   try {
@@ -24,27 +35,25 @@ export const searchNews = async (tags: string[]): Promise<NewsArticle[]> => {
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING, description: "Headline of the news" },
-              source: { type: Type.STRING, description: "Name of the news outlet" },
-              url: { type: Type.STRING, description: "URL to the article if available, otherwise leave empty" },
-              snippet: { type: Type.STRING, description: "A short summary of the event" },
-            },
-            required: ["title", "source", "snippet"]
-          }
-        }
+        // responseMimeType and responseSchema removed to avoid INVALID_ARGUMENT error
       },
     });
 
-    const text = response.text;
-    if (!text) return [];
+    let text = response.text || "[]";
+    
+    // Cleanup: Remove potential markdown formatting if the model adds it despite instructions
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    const rawData = JSON.parse(text);
+    let rawData;
+    try {
+        rawData = JSON.parse(text);
+    } catch (e) {
+        console.warn("Failed to parse JSON from news search, raw text:", text);
+        // If parsing fails, return empty array rather than crashing
+        return [];
+    }
+
+    if (!Array.isArray(rawData)) return [];
     
     // Map to our internal type
     return rawData.map((item: any, index: number) => ({

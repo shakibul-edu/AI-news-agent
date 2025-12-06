@@ -3,23 +3,32 @@ import { Header } from './components/Header';
 import { AgentControl } from './components/AgentControl';
 import { NewsFeed } from './components/NewsFeed';
 import { ActivityLog } from './components/ActivityLog';
-import { AgentConfig, LogEntry, NewsArticle, ProcessedPost } from './types';
+import { AgentConfig, LogEntry, NewsArticle, ProcessedPost, FacebookPage } from './types';
 import { searchNews, generateBanglaPost } from './services/geminiService';
 
 const DEFAULT_TAGS = ['Technology', 'World Politics', 'Science', 'Bangladesh'];
+
+// Extend Window interface for FB SDK
+declare global {
+  interface Window {
+    FB: any;
+    fbAsyncInit: () => void;
+  }
+}
 
 const App: React.FC = () => {
   const [config, setConfig] = useState<AgentConfig>({
     tags: DEFAULT_TAGS,
     autoMode: false,
     refreshInterval: 60,
-    fbConnected: false
+    connectedPage: null
   });
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [rawArticles, setRawArticles] = useState<NewsArticle[]>([]);
   const [processedPosts, setProcessedPosts] = useState<ProcessedPost[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
 
   // Helper to add logs
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
@@ -41,6 +50,33 @@ const App: React.FC = () => {
     }
   };
 
+  // Helper to load Facebook SDK
+  const loadFacebookSdk = (appId: string) => {
+    if (window.FB) {
+      setFbSdkLoaded(true);
+      return;
+    }
+
+    window.fbAsyncInit = function() {
+      window.FB.init({
+        appId      : appId,
+        cookie     : true,
+        xfbml      : true,
+        version    : 'v19.0'
+      });
+      setFbSdkLoaded(true);
+      addLog('Facebook SDK initialized successfully.', 'success');
+    };
+
+    (function(d, s, id){
+       var js, fjs = d.getElementsByTagName(s)[0];
+       if (d.getElementById(id)) {return;}
+       js = d.createElement(s) as HTMLScriptElement; js.id = id;
+       js.src = "https://connect.facebook.net/en_US/sdk.js";
+       fjs.parentNode?.insertBefore(js, fjs);
+     }(document, 'script', 'facebook-jssdk'));
+  };
+
   // Core Agent Logic
   const runAgentCycle = useCallback(async () => {
     if (isProcessing) return;
@@ -60,8 +96,7 @@ const App: React.FC = () => {
 
       addLog(`Found ${newsItems.length} articles. Filtering duplicates...`, 'success');
 
-      // Filter out news we've already seen (simple ID check based on URL or Title match ideally, but using ID here for simplicity)
-      // In a real app, we'd check against a DB of processed URLs.
+      // Filter out news we've already seen
       const newArticles = newsItems.filter(item => 
         !rawArticles.some(existing => existing.title === item.title)
       );
@@ -105,10 +140,7 @@ const App: React.FC = () => {
     let intervalId: ReturnType<typeof setInterval>;
     
     if (config.autoMode) {
-      // Run immediately on start
       runAgentCycle();
-      
-      // Then set interval
       intervalId = setInterval(() => {
         runAgentCycle();
       }, config.refreshInterval * 1000);
@@ -119,38 +151,100 @@ const App: React.FC = () => {
     };
   }, [config.autoMode, config.refreshInterval, runAgentCycle]);
 
-  // Handlers
-  const handlePostToFb = (post: ProcessedPost) => {
-    if (!config.fbConnected) {
-      addLog('Cannot post: Facebook Page not connected.', 'error');
+  // Handle Connecting to Facebook
+  const handleConnectFb = () => {
+    // 1. Check/Load SDK
+    if (!fbSdkLoaded) {
+      const appId = window.prompt("To connect, please enter your Facebook App ID (Developers Console):");
+      if (!appId) {
+        addLog("Connection cancelled. App ID required.", "error");
+        return;
+      }
+      loadFacebookSdk(appId);
+      addLog("Loading SDK... Please click 'Connect Page' again once initialized.", "info");
       return;
     }
 
-    addLog(`Posting to Facebook: "${post.banglaHeadline}"...`, 'action');
-    
-    // Simulate API call delay
-    setTimeout(() => {
-      setProcessedPosts(prev => prev.map(p => 
-        p.id === post.id ? { ...p, status: 'posted' } : p
-      ));
-      addLog('Successfully posted to Facebook Page.', 'success');
-    }, 1500);
+    addLog("Initiating Facebook Login...", "action");
+
+    // 2. Login & Request Permissions
+    window.FB.login((response: any) => {
+      if (response.authResponse) {
+        addLog("Logged in successfully. Fetching Pages...", "success");
+        
+        // 3. Fetch Pages
+        window.FB.api('/me/accounts', (pageResponse: any) => {
+          if (pageResponse && pageResponse.data) {
+            const pages = pageResponse.data;
+            if (pages.length === 0) {
+              addLog("No Facebook Pages found for this account.", "error");
+            } else if (pages.length === 1) {
+              // Auto select if only 1
+              const page = pages[0];
+              updateConfig({ connectedPage: { id: page.id, name: page.name, access_token: page.access_token } });
+              addLog(`Connected to Page: ${page.name}`, "success");
+            } else {
+              // Let user choose
+              const msg = "Found multiple pages. Enter number to select:\n" + 
+                pages.map((p: any, i: number) => `${i + 1}. ${p.name}`).join('\n');
+              
+              const selection = window.prompt(msg);
+              const index = selection ? parseInt(selection) - 1 : -1;
+              
+              if (index >= 0 && index < pages.length) {
+                const page = pages[index];
+                updateConfig({ connectedPage: { id: page.id, name: page.name, access_token: page.access_token } });
+                addLog(`Connected to Page: ${page.name}`, "success");
+              } else {
+                addLog("Invalid selection. Page not connected.", "error");
+              }
+            }
+          } else {
+            addLog("Failed to retrieve pages.", "error");
+          }
+        });
+      } else {
+        addLog("User cancelled login or did not fully authorize.", "error");
+      }
+    }, { scope: 'pages_manage_posts,pages_show_list,pages_read_engagement' });
   };
 
-  const handleConnectFb = () => {
-    const pageInfo = window.prompt("Please enter your Facebook Page Name or ID to connect:");
-    
-    if (pageInfo && pageInfo.trim().length > 0) {
-      updateConfig({ fbConnected: true });
-      addLog(`Successfully connected to Facebook Page: "${pageInfo}"`, 'success');
-    } else if (pageInfo !== null) {
-      addLog('Connection cancelled: No Page Name/ID provided.', 'error');
+  // Handle Posting to Facebook
+  const handlePostToFb = (post: ProcessedPost) => {
+    if (!config.connectedPage) {
+      addLog('Cannot post: No Facebook Page connected.', 'error');
+      return;
     }
+
+    addLog(`Posting to ${config.connectedPage.name}: "${post.banglaHeadline}"...`, 'action');
+    
+    // Construct the post message
+    const message = `${post.banglaHeadline}\n\n${post.banglaSummary}\n\n${post.hashtags.join(' ')}\n\nSource: AI Generated via Sambad Agent`;
+
+    // Call Graph API
+    window.FB.api(
+      `/${config.connectedPage.id}/feed`,
+      'POST',
+      {
+        message: message,
+        access_token: config.connectedPage.access_token
+      },
+      (response: any) => {
+        if (response && !response.error) {
+           setProcessedPosts(prev => prev.map(p => 
+            p.id === post.id ? { ...p, status: 'posted' } : p
+          ));
+          addLog(`Successfully posted. Post ID: ${response.id}`, 'success');
+        } else {
+          addLog(`Failed to post: ${response.error?.message}`, 'error');
+        }
+      }
+    );
   };
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      <Header fbConnected={config.fbConnected} onConnectFb={handleConnectFb} />
+      <Header connectedPage={config.connectedPage} onConnectFb={handleConnectFb} />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -171,6 +265,12 @@ const App: React.FC = () => {
                  <strong>Warning:</strong> No API_KEY detected. The agent cannot fetch or process news. Please check your environment variables.
                </div>
             )}
+            
+            {!config.connectedPage && (
+               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+                 <strong>Setup Required:</strong> Click "Connect Page" in the header to link a Facebook Page for auto-posting. You will need a valid Facebook App ID.
+               </div>
+            )}
           </div>
 
           {/* Right Main Area: News Feed */}
@@ -180,7 +280,7 @@ const App: React.FC = () => {
               rawArticles={rawArticles}
               onPostToFb={handlePostToFb}
               onConnectFb={handleConnectFb}
-              fbConnected={config.fbConnected}
+              fbConnected={!!config.connectedPage}
             />
           </div>
 

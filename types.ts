@@ -25,9 +25,15 @@ export interface LogEntry {
   type: 'info' | 'success' | 'error' | 'action';
 }
 
+export interface FacebookPage {
+  id: string;
+  name: string;
+  access_token: string;
+}
+
 export interface AgentConfig {
   tags: string[];
   autoMode: boolean;
   refreshInterval: number; // in seconds
-  fbConnected: boolean;
+  connectedPage: FacebookPage | null;
 }

@@ -1,12 +1,13 @@
 import React from 'react';
 import { Radio, Zap, Facebook } from 'lucide-react';
+import { FacebookPage } from '../types';
 
 interface HeaderProps {
-  fbConnected: boolean;
+  connectedPage: FacebookPage | null;
   onConnectFb: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ fbConnected, onConnectFb }) => {
+export const Header: React.FC<HeaderProps> = ({ connectedPage, onConnectFb }) => {
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,11 +23,11 @@ export const Header: React.FC<HeaderProps> = ({ fbConnected, onConnectFb }) => {
           </div>
           
           <div className="flex items-center space-x-4">
-            <div className={`flex items-center px-3 py-1 rounded-full text-sm font-medium ${fbConnected ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600'}`}>
+            <div className={`flex items-center px-3 py-1 rounded-full text-sm font-medium ${connectedPage ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600'}`}>
               <Facebook className="w-4 h-4 mr-2" />
-              {fbConnected ? 'Page Connected' : 'No Page Connected'}
+              {connectedPage ? connectedPage.name : 'No Page Connected'}
             </div>
-            {!fbConnected && (
+            {!connectedPage && (
               <button 
                 onClick={onConnectFb}
                 className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
