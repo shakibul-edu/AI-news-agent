@@ -3,7 +3,7 @@ import { ShieldCheck, AlertTriangle } from 'lucide-react';
 import { appwriteService } from '../services/appwriteService';
 
 export const Login: React.FC = () => {
-  const projectId = process.env.VITE_APPWRITE_PROJECT_ID;
+  const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
   const isConfigured = !!projectId;
 
   return (

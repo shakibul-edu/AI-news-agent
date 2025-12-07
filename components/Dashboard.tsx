@@ -315,12 +315,13 @@ export const Dashboard: React.FC = () => {
         }
       } else {
         fbPostId = await new Promise((resolve, reject) => {
+            if (!config.connectedPage) return reject(new Error("No connected page"));
             window.FB.api(
                 `/${config.connectedPage.id}/feed`,
                 'POST',
                 {
                   message: message,
-                  access_token: config.connectedPage!.access_token
+                  access_token: config.connectedPage.access_token
                 },
                 (response: any) => {
                   if (response && !response.error) {
