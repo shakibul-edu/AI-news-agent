@@ -58,7 +58,7 @@ export async function generateImageAction(title: string) {
     const candidate = response.candidates?.[0];
     if (candidate?.content?.parts) {
       for (const part of candidate.content.parts) {
-        if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+        if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
           return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
         }
       }
