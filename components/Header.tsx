@@ -18,20 +18,22 @@ export const Header: React.FC<HeaderProps> = ({ connectedPage, onConnectFb, onLo
               <Zap className="h-6 w-6 text-white" />
             </div>
             <div className="ml-3">
-              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Sambad AI</h1>
-              <p className="text-xs text-gray-500 font-medium">Automated News Agent</p>
+              <h1 className="text-xl font-bold text-gray-900 tracking-tight whitespace-nowrap">Sambad AI</h1>
+              <p className="text-xs text-gray-500 font-medium hidden sm:block">Automated News Agent</p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <div className={`flex items-center px-3 py-1 rounded-full text-sm font-medium ${connectedPage ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600'}`}>
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            <div className={`items-center px-3 py-1 rounded-full text-sm font-medium ${connectedPage ? 'bg-blue-50 text-blue-700 border border-blue-200 flex' : 'bg-gray-100 text-gray-600 hidden sm:flex'}`}>
               <Facebook className="w-4 h-4 mr-2" />
-              {connectedPage ? connectedPage.name : 'No Page Connected'}
+              <span className="truncate max-w-[100px] sm:max-w-none">
+                {connectedPage ? connectedPage.name : 'No Page Connected'}
+              </span>
             </div>
             {!connectedPage && (
               <button 
                 onClick={onConnectFb}
-                className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
+                className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-md transition-colors whitespace-nowrap"
               >
                 Connect Page
               </button>
